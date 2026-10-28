@@ -573,7 +573,7 @@
     const T = window.THREE;
     let renderer;
     try { renderer = new T.WebGLRenderer({ canvas: gl, antialias: true }); } catch { return null; }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 3));   // スマホの高精細な画面（3倍）でもくっきり描く
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
     renderer.outputEncoding = T.sRGBEncoding; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
     const srgb = (hex) => new T.Color(hex).convertSRGBToLinear();   // 色の指定は見たままの色（sRGB）で書く
@@ -731,9 +731,11 @@
       const [r0, r1] = { treble: [RING.trebleIn, RING.trebleOut], double: [RING.doubleIn, RING.doubleOut], outer: [RING.trebleOut, RING.doubleIn], single: [RING.outerBull, RING.trebleIn] }[hit.zone];
       return new T.RingGeometry(mm(r0), mm(r1), 48, 1, -a - Math.PI / 20, Math.PI / 10);
     }
+    // 描く解像度を、表示されている大きさに合わせる（合っていないと引き伸ばされてぼやける）
+    let sized = '';
     function resize3() {
-      const r = gl.getBoundingClientRect(); if (!r.width) return;
-      renderer.setSize(r.width, r.height, false); camera.aspect = r.width / r.height; camera.updateProjectionMatrix();
+      const w = gl.clientWidth, h = gl.clientHeight; if (!w || !h || sized === `${w}x${h}`) return;
+      sized = `${w}x${h}`; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
     }
     function reset() {
       S.phase = 'idle'; S.t = 0; if (glow) { boardGroup.remove(glow); glow.geometry.dispose(); glow = null; }
@@ -827,7 +829,7 @@
     let last = performance.now();
     function loop(now) {
       const dt = Math.min(.05, (now - last) / 1000); last = now;
-      if (state.mode === 'darts') { update(dt, now); renderer.render(scene, camera); }
+      if (state.mode === 'darts') { resize3(); update(dt, now); renderer.render(scene, camera); }   // 大きさが変わったら毎回合わせ直す
       requestAnimationFrame(loop);
     }
     reset(); resize3(); requestAnimationFrame(loop);
