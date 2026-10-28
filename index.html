@@ -576,6 +576,7 @@
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
     renderer.outputEncoding = T.sRGBEncoding; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+    const srgb = (hex) => new T.Color(hex).convertSRGBToLinear();   // 色の指定は見たままの色（sRGB）で書く
     const scene = new T.Scene(); scene.background = new T.Color(0x0c0a09);
     const camera = new T.PerspectiveCamera(36, VW / VH, 0.3, 900);
 
@@ -611,62 +612,71 @@
     const wall = new T.Mesh(new T.PlaneGeometry(520, 420), new T.MeshStandardMaterial({ map: wallTex, roughness: .85, envMapIntensity: .2 }));
     wall.position.z = -4.6; wall.receiveShadow = true; scene.add(wall);
 
-    // 的の面の絵（色）と、凹凸（ワイヤーと数字が浮き出て見えるように）を、実物の寸法（mm）で描く
-    function paintFace(size) {
-      const map = document.createElement('canvas'), bump = document.createElement('canvas');
-      map.width = map.height = bump.width = bump.height = size;
-      const g = map.getContext('2d'), b = bump.getContext('2d'), c = size / 2, k = (size / 2) / 225, rand = rng(11);
-      const wd = (x, r0, r1, a0, a1) => { x.beginPath(); x.arc(c, c, r1 * k, a0, a1); x.arc(c, c, r0 * k, a1, a0, true); x.closePath(); };
-      g.fillStyle = '#121110'; g.fillRect(0, 0, size, size); b.fillStyle = '#000'; b.fillRect(0, 0, size, size);
-      for (let i = 0; i < 20; i++) {
-        const a0 = segAngle(i) - Math.PI / 20, a1 = segAngle(i) + Math.PI / 20, dark = i % 2 === 0;
-        wd(g, RING.outerBull, RING.doubleOut, a0, a1); g.fillStyle = dark ? '#1a1816' : '#ecdcb8'; g.fill();
-        for (const [r0, r1] of [[RING.trebleIn, RING.trebleOut], [RING.doubleIn, RING.doubleOut]]) { wd(g, r0, r1, a0, a1); g.fillStyle = dark ? '#c4262c' : '#127d47'; g.fill(); }
-      }
-      g.beginPath(); g.arc(c, c, RING.outerBull * k, 0, Math.PI * 2); g.fillStyle = '#127d47'; g.fill();
-      g.beginPath(); g.arc(c, c, RING.bull * k, 0, Math.PI * 2); g.fillStyle = '#c4262c'; g.fill();
-      for (const x of [g, b]) { x.save(); x.beginPath(); x.arc(c, c, RING.doubleOut * k, 0, Math.PI * 2); x.clip(); }
-      for (let n = 0; n < 50000; n++) {          // 麻の繊維
-        const a = rand() * Math.PI * 2, r = Math.sqrt(rand()) * RING.doubleOut * k, x = c + Math.cos(a) * r, y = c + Math.sin(a) * r;
-        const ang = rand() * Math.PI, len = (0.4 + rand() * 1.4) * k, v = rand();
-        g.strokeStyle = v < .5 ? `rgba(255,255,255,${.035 + rand() * .06})` : `rgba(0,0,0,${.05 + rand() * .08})`; g.lineWidth = .35 * k;
-        g.beginPath(); g.moveTo(x, y); g.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len); g.stroke();
-        b.strokeStyle = `rgba(255,255,255,${.08 + v * .25})`; b.lineWidth = .35 * k;
-        b.beginPath(); b.moveTo(x, y); b.lineTo(x + Math.cos(ang) * len, y + Math.sin(ang) * len); b.stroke();
-      }
-      g.restore(); b.restore();
-      const wires = (x, color, width) => {
-        x.strokeStyle = color; x.lineWidth = width * k; x.lineCap = 'round';
-        for (const r of [RING.bull, RING.outerBull, RING.trebleIn, RING.trebleOut, RING.doubleIn, RING.doubleOut]) { x.beginPath(); x.arc(c, c, r * k, 0, Math.PI * 2); x.stroke(); }
-        for (let i = 0; i < 20; i++) { const a = segAngle(i) - Math.PI / 20; x.beginPath(); x.moveTo(c + Math.cos(a) * RING.outerBull * k, c + Math.sin(a) * RING.outerBull * k); x.lineTo(c + Math.cos(a) * RING.doubleOut * k, c + Math.sin(a) * RING.doubleOut * k); x.stroke(); }
-        x.beginPath(); x.arc(c, c, 222 * k, 0, Math.PI * 2); x.stroke();
-      };
-      wires(g, '#2c2e33', 1.6); wires(g, '#d9dde3', .8); wires(b, '#ffffff', 1.4);
-      const font = `600 ${24 * k}px ${getComputedStyle(document.documentElement).getPropertyValue('--font-num')}`;
-      for (const [x, color] of [[g, '#ecebe6'], [b, '#ffffff']]) {
-        x.fillStyle = color; x.font = font; x.textAlign = 'center'; x.textBaseline = 'middle';
-        ORDER.forEach((num, i) => { const a = segAngle(i); x.fillText(String(num), c + Math.cos(a) * 196 * k, c + Math.sin(a) * 196 * k + 1); });
-      }
-      return { map: tex(map, true), bump: tex(bump, false) };
-    }
-
     // 的（本体・面・周りのウレタンの輪）
     const boardGroup = new T.Group(); scene.add(boardGroup);
-    const foam = new T.MeshStandardMaterial({ color: 0x050505, roughness: .95, envMapIntensity: .15 });
+    const foam = new T.MeshStandardMaterial({ color: srgb(0x050505), roughness: .95, envMapIntensity: .15 });
     const sur = new T.Mesh(new T.RingGeometry(22.4, 33, 128), foam); sur.position.z = -2.6; sur.receiveShadow = true;
     const surEdge = new T.Mesh(new T.CylinderGeometry(33, 33, 1.9, 128, 1, true), foam); surEdge.rotation.x = Math.PI / 2; surEdge.position.z = -3.55; surEdge.castShadow = true;
-    const body = new T.Mesh(new T.CylinderGeometry(22.6, 22.6, 4, 128), new T.MeshStandardMaterial({ color: 0x0b0b0b, roughness: .65, envMapIntensity: .3 }));
+    const body = new T.Mesh(new T.CylinderGeometry(22.6, 22.6, 4, 128), new T.MeshStandardMaterial({ color: srgb(0x0b0b0b), roughness: .65, envMapIntensity: .3 }));
     body.rotation.x = Math.PI / 2; body.position.z = -2; body.castShadow = body.receiveShadow = true;
-    const faceTex = paintFace(2048);
-    const face = new T.Mesh(new T.CircleGeometry(22.5, 128), new T.MeshStandardMaterial({ map: faceTex.map, bumpMap: faceTex.bump, bumpScale: .05, roughness: .9, envMapIntensity: .25 }));
-    face.position.z = .01; face.receiveShadow = true;
-    boardGroup.add(sur, surEdge, body, face);
+    // 的の面を、画像ではなく立体の部品で組む（近づいても粗くならない）
+    // 麻の質感: 512px の模様を繰り返し敷き詰める（端がつながるように、はみ出した線は反対側にも描く）
+    const fiber = document.createElement('canvas'); fiber.width = fiber.height = 512;
+    { const g = fiber.getContext('2d'), r = rng(11); g.fillStyle = '#d9d9d9'; g.fillRect(0, 0, 512, 512);
+      for (let n = 0; n < 9000; n++) {
+        const x = r() * 512, y = r() * 512, ang = r() * Math.PI, len = 3 + r() * 9, v = r();
+        g.strokeStyle = v < .5 ? `rgba(255,255,255,${.25 + r() * .35})` : `rgba(60,60,60,${.18 + r() * .3})`; g.lineWidth = .8 + r() * .8;
+        for (const [ox, oy] of [[0, 0], [-512, 0], [512, 0], [0, -512], [0, 512]]) {
+          g.beginPath(); g.moveTo(x + ox, y + oy); g.lineTo(x + ox + Math.cos(ang) * len, y + oy + Math.sin(ang) * len); g.stroke();
+        }
+      } }
+    const fiberMap = tex(fiber, true), fiberBump = tex(fiber, false);
+    for (const t of [fiberMap, fiberBump]) { t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(5, 5); }
+    const sisal = (color) => new T.MeshStandardMaterial({ color: srgb(color), map: fiberMap, bumpMap: fiberBump, bumpScale: .025, roughness: .92, envMapIntensity: .25 });
+    const M = { dark: sisal(0x1d1b19), cream: sisal(0xf3e3c0), red: sisal(0xc8262d), green: sisal(0x138a4c), ring: sisal(0x121110) };
+    const cm = (v) => v / 10;                                  // mm → cm
+    const flat = (geo) => {                                    // UV を的全体で共通にする（質感の細かさをそろえる）
+      const p = geo.attributes.position, uv = geo.attributes.uv;
+      for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 45 + .5, p.getY(i) / 45 + .5);
+      return geo;
+    };
+    const faceGroup = new T.Group(); faceGroup.position.z = .01;
+    const put = (geo, mat) => { const m = new T.Mesh(flat(geo), mat); m.receiveShadow = true; faceGroup.add(m); };
+    put(new T.RingGeometry(cm(RING.doubleOut), 22.5, 256, 1), M.ring);
+    for (let i = 0; i < 20; i++) {
+      const start = -segAngle(i) - Math.PI / 20, len = Math.PI / 10, dark = i % 2 === 0;
+      const bands = [[RING.outerBull, RING.trebleIn, dark ? M.dark : M.cream], [RING.trebleIn, RING.trebleOut, dark ? M.red : M.green],
+                     [RING.trebleOut, RING.doubleIn, dark ? M.dark : M.cream], [RING.doubleIn, RING.doubleOut, dark ? M.red : M.green]];
+      for (const [r0, r1, mat] of bands) put(new T.RingGeometry(cm(r0), cm(r1), 24, 2, start, len), mat);
+    }
+    put(new T.RingGeometry(cm(RING.bull), cm(RING.outerBull), 64, 1), M.green);
+    put(new T.CircleGeometry(cm(RING.bull), 48), M.red);
+    // 金属のワイヤー（丸い針金。照明を反射する）
+    const wireM = new T.MeshStandardMaterial({ color: srgb(0xd4d8de), metalness: 1, roughness: .28 });
+    for (const r of [RING.bull, RING.outerBull, RING.trebleIn, RING.trebleOut, RING.doubleIn, RING.doubleOut, 222]) {
+      const w = new T.Mesh(new T.TorusGeometry(cm(r), .045, 8, 256), wireM); w.position.z = .035; faceGroup.add(w);
+    }
+    for (let i = 0; i < 20; i++) {
+      const a = -(segAngle(i) - Math.PI / 20), r0 = cm(RING.outerBull), r1 = cm(RING.doubleOut);
+      const w = new T.Mesh(new T.CylinderGeometry(.04, .04, r1 - r0, 8), wireM);
+      w.position.set(Math.cos(a) * (r0 + r1) / 2, Math.sin(a) * (r0 + r1) / 2, .035); w.rotation.z = a - Math.PI / 2; faceGroup.add(w);
+    }
+    // 数字（1文字ずつ高解像度で描く）
+    const numFont = getComputedStyle(document.documentElement).getPropertyValue('--font-num');
+    ORDER.forEach((num, i) => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+      const g = cv.getContext('2d'); g.fillStyle = '#f2f1ec'; g.font = `600 190px ${numFont}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(num), 128, 136);
+      const t = tex(cv, true);
+      const m = new T.Mesh(new T.PlaneGeometry(2.7, 2.7), new T.MeshStandardMaterial({ map: t, transparent: true, roughness: .5, metalness: .2, envMapIntensity: .4 }));
+      const a = -segAngle(i), r = cm(196); m.position.set(Math.cos(a) * r, Math.sin(a) * r, .03); faceGroup.add(m);
+    });
+    boardGroup.add(sur, surEdge, body, faceGroup);
 
     // 矢（先端 → バレル → シャフト → フライト）。先端が原点で、後ろが +z。単位は cm で実物と同じくらい
-    const steel = new T.MeshStandardMaterial({ color: 0xdfe3e8, metalness: 1, roughness: .2 });
-    const tung = new T.MeshStandardMaterial({ color: 0x9ba2ab, metalness: 1, roughness: .3 });
-    const shaftM = new T.MeshStandardMaterial({ color: 0x141414, metalness: .35, roughness: .25 });
-    const ringM = new T.MeshStandardMaterial({ color: 0xd9531a, metalness: .7, roughness: .3 });
+    const steel = new T.MeshStandardMaterial({ color: srgb(0xdfe3e8), metalness: 1, roughness: .2 });
+    const tung = new T.MeshStandardMaterial({ color: srgb(0x9ba2ab), metalness: 1, roughness: .3 });
+    const shaftM = new T.MeshStandardMaterial({ color: srgb(0x141414), metalness: .35, roughness: .25 });
+    const ringM = new T.MeshStandardMaterial({ color: srgb(0xd9531a), metalness: .7, roughness: .3 });
     const lathe = (pts, mat) => { const geo = new T.LatheGeometry(pts.map(([r, z]) => new T.Vector2(r, z)), 40); geo.rotateX(Math.PI / 2); const m = new T.Mesh(geo, mat); m.castShadow = true; return m; };
     const knurl = []; for (let z = 3.75; z < 7.7; z += .16) knurl.push([.355, z], [.322, z + .05], [.322, z + .09], [.355, z + .14]);
     const fl = document.createElement('canvas'); fl.width = 256; fl.height = 512;
