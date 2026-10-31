@@ -3,6 +3,7 @@
 大学祭アンケート抽選の演出案（立体のダーツ／賞品の数だけ並ぶカードめくり）のデモです。
 
 - 公開ページ: https://2370058.github.io/daigakusai-demo/
+- 立体のダーツの変更前・変更後の比較（描く解像度の上限 3倍 → 2倍）: https://2370058.github.io/daigakusai-demo/compare.html
 - ファイルは `index.html` の1つだけで完結しています（ブラウザで直接開いても動きます）
 - 抽選はページの中だけで行います。本番のアプリ（サーバー・DB）には触りません
 - 立体のダーツは [Three.js](https://threejs.org/)（MIT License）を CDN から読み込んで使っています
