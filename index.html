@@ -573,7 +573,8 @@
     const T = window.THREE;
     let renderer;
     try { renderer = new T.WebGLRenderer({ canvas: gl, antialias: true }); } catch { return null; }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 3));   // スマホの高精細な画面（3倍）でもくっきり描く
+    // スマホの高精細な画面でもくっきり描く。ただし 2 倍まで（3 倍だと描く点が 2 倍以上に増えて重く、見た目はほぼ変わらない）
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
     renderer.outputEncoding = T.sRGBEncoding; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
     const srgb = (hex) => new T.Color(hex).convertSRGBToLinear();   // 色の指定は見たままの色（sRGB）で書く
@@ -832,6 +833,11 @@
       if (state.mode === 'darts') { resize3(); update(dt, now); renderer.render(scene, camera); }   // 大きさが変わったら毎回合わせ直す
       requestAnimationFrame(loop);
     }
+    // タップする前に、刺さったときに初めて使う部品（光る区画）も含めて、描く準備（シェーダーの組み立て）を済ませておく。
+    // 済ませないと、刺さった瞬間にその場で組み立てが走り、一番の見せ場でカクッと止まる
+    const warm = new T.Mesh(new T.CircleGeometry(.1, 8), glowMat); boardGroup.add(warm);
+    renderer.compile(scene, camera);
+    boardGroup.remove(warm); warm.geometry.dispose();
     reset(); resize3(); requestAnimationFrame(loop);
     return { throwTo, skip, reset, resize: resize3, busy: () => S.phase !== 'idle' && S.phase !== 'done' };
   }
