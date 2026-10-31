@@ -475,7 +475,10 @@
     const seg = Math.floor(Math.random() * 20);
     const a = segAngle(seg) + (Math.random() - .5) * (Math.PI / 10) * .6;
     const r = { bull: Math.random() * 12, treble: 100 + Math.random() * 6, double: 163 + Math.random() * 6,
-                outer: 115 + Math.random() * 40, single: 24 + Math.random() * 68 }[zone];
+                outer: 115 + Math.random() * 40,
+                // 参加賞はブルのすぐ外（17〜28mm）。遠くに刺さると、飛んでいる途中で「外れ」と分かってしまうため、
+                // 最後までブルに入るか分からないギリギリの所に刺す
+                single: 17 + Math.random() * 11 }[zone];
     return { x: BX + Math.cos(a) * r * MM, y: BY + Math.sin(a) * r * MM, seg, zone };
   }
   function zonePath(g, hit) {
@@ -761,6 +764,8 @@
     }
     function throwTo(hit, done) {
       S.hit = hit; S.target = toBoard(hit); S.done = done; S.tip = null;
+      // ブルか参加賞のときは、ブルの真ん中を狙って飛ばし、最後の一瞬で本当の位置へずらす（当たりか外れかを最後まで分からなくする）
+      S.aim = hit.zone === 'bull' || hit.zone === 'single' ? V(0, 0, 0) : S.target.clone();
       if (reduced) { camera.position.copy(CAMF); S.look.copy(LOOK0); finish(); return; }
       S.phase = 'windup'; S.t = 0;
     }
@@ -781,7 +786,7 @@
         dartObj.position.copy(p); orient(V(.25 - u * .22, -.1 + u * .12, 1), .6);
         if (S.t >= .24) {
           S.phase = 'flight'; S.tau = 0; S.p0 = p.clone(); S.roll = .6;
-          S.v0 = S.target.clone().sub(S.p0).sub(G.clone().multiplyScalar(.5 * TF * TF)).divideScalar(TF);
+          S.v0 = S.aim.clone().sub(S.p0).sub(G.clone().multiplyScalar(.5 * TF * TF)).divideScalar(TF);
           whoosh(.9);
         }
       } else if (S.phase === 'flight') {
@@ -789,7 +794,9 @@
         const speed = .12 + (.55 - .12) * ease((pz - 10) / 26);      // 的の直前でスローモーション
         S.tau = Math.min(TF, S.tau + dt * speed);
         const tau = S.tau;
-        const p = S.p0.clone().add(S.v0.clone().multiplyScalar(tau)).add(G.clone().multiplyScalar(.5 * tau * tau));
+        // 最後の 28% で、狙い（ブルの真ん中）から本当の刺さる位置へ少しずつずらす
+        const late = ease((tau / TF - .72) / .28), off = S.target.clone().sub(S.aim).multiplyScalar(late);
+        const p = S.p0.clone().add(S.v0.clone().multiplyScalar(tau)).add(G.clone().multiplyScalar(.5 * tau * tau)).add(off);
         S.v = S.v0.clone().add(G.clone().multiplyScalar(tau));
         S.roll += dt * speed * Math.PI * 2 * 5;                       // 回りながら飛ぶ
         const wob = .06 * Math.sin(tau * 70) * Math.exp(-tau * 5);
@@ -797,7 +804,7 @@
         const e = ease(tau / TF / .35);
         const chase = p.clone().add(V(-4.5, 3.2, 24));
         camera.position.copy(CAM0.clone().lerp(chase, e));
-        S.look.copy(LOOK0.clone().lerp(p.clone().lerp(S.target, .55), e));
+        S.look.copy(LOOK0.clone().lerp(p.clone().lerp(S.aim.clone().add(off), .55), e));   // カメラも最後まで狙いの方を見る
         if (tau >= TF) land();
       } else if (S.phase === 'impact') {
         const t = S.t;
