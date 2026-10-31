@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ダーツの解像度比較</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* 上に操作、その下に「変更前 / 変更後」の動く的を2列で並べ、最後に静止画の拡大を置く。スマホでは1列 */
+:root {
+  --bg: #f6f4f1; --card: #ffffff; --fg: #1d1a17; --muted: #6b635b; --line: #ded8d0;
+  --before: #8a5a2b; --after: #1f7a4c; --chip: #ece7e1;
+  --font-body: "Zen Kaku Gothic New", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #171513; --card: #211e1b; --fg: #eee9e3; --muted: #a59c92; --line: #38332e; --before: #d9a06a; --after: #6cc89a; --chip: #2c2824; color-scheme: dark; }
+}
+:root[data-theme="dark"] { --bg: #171513; --card: #211e1b; --fg: #eee9e3; --muted: #a59c92; --line: #38332e; --before: #d9a06a; --after: #6cc89a; --chip: #2c2824; color-scheme: dark; }
+body { margin: 0; background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.7; }
+.wrap { max-width: 980px; margin: 0 auto; padding-block: 28px 48px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid; gap: 28px; }
+h1 { font-size: 1.6rem; margin: 0; text-wrap: balance; }
+h2 { font-size: 1.15rem; margin: 0; text-wrap: balance; }
+p { margin: 0; max-width: 65ch; }
+.lead, .note { color: var(--muted); }
+.note { font-size: .88rem; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; }
+.seg { display: inline-flex; background: var(--chip); border-radius: 999px; padding: 3px; gap: 2px; }
+.seg button { font: inherit; font-size: .88rem; border: 0; background: transparent; color: var(--fg); padding: 6px 14px; border-radius: 999px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--card); box-shadow: 0 1px 3px rgba(0,0,0,.15); font-weight: 700; }
+.seg button:focus-visible, canvas:focus-visible { outline: 3px solid var(--after); outline-offset: 2px; }
+.pair { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 700px) { .pair { grid-template-columns: 1fr; } }
+.panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 14px; display: grid; gap: 10px; min-width: 0; }
+.panel header { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.tag { font-weight: 700; padding: 1px 10px; border-radius: 999px; border: 1.5px solid currentColor; font-size: .8rem; }
+.tag.before { color: var(--before); } .tag.after { color: var(--after); }
+.spec { color: var(--muted); font-size: .85rem; }
+.stage { position: relative; width: 100%; max-width: 380px; aspect-ratio: 380 / 470; margin: 0 auto; border-radius: 10px; overflow: hidden; background: #0c0a09; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: pointer; }
+[hidden] { display: none !important; }
+.paused { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(12,10,9,.55); color: #f2ede6; font-weight: 700; pointer-events: none; }
+.status { min-height: 1.7em; text-align: center; font-weight: 700; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; margin: 0; font-size: .88rem; }
+dt { color: var(--muted); }
+dd { margin: 0; font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; }
+.shots { display: grid; gap: 12px; }
+figure { margin: 0; display: grid; gap: 6px; min-width: 0; }
+figure img { width: auto; max-width: 100%; display: block; border-radius: 8px; border: 1px solid var(--line); image-rendering: pixelated; }
+figcaption { font-size: .85rem; }
+.err { color: #b00020; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header style="display:grid;gap:8px">
+    <h1>立体のダーツ：変更前と変更後</h1>
+    <p class="lead"><a href="./">デモのトップへ戻る</a></p>
+    <p class="lead">本番と同じダーツのプログラムを、そのまま2つ動かしています。的をタップすると投げます。比べるために、動くのはタップした方だけで、もう片方は止まります。</p>
+  </header>
+
+  <div class="controls">
+    <span class="spec">画面の細かさ</span>
+    <div class="seg" role="group" aria-label="画面の細かさ">
+      <button type="button" id="dpr3" aria-pressed="true">3倍の画面として試す</button>
+      <button type="button" id="dprNative" aria-pressed="false">この端末のまま</button>
+    </div>
+  </div>
+
+  <div class="pair">
+    <section class="panel" id="p-before">
+      <header><span class="tag before">変更前</span><span class="spec">上限 3倍・描く準備はタップのあと</span></header>
+      <div class="stage"><canvas tabindex="0" aria-label="変更前のダーツ。タップすると投げます"></canvas><div class="paused" hidden>タップで動かす</div></div>
+      <div class="status" aria-live="polite"></div>
+      <dl><dt>描く解像度</dt><dd class="res">-</dd><dt>1秒あたりのコマ数</dt><dd class="fps">-</dd><dt>投げている間の一番長いコマ</dt><dd class="worst">-</dd></dl>
+    </section>
+    <section class="panel" id="p-after">
+      <header><span class="tag after">変更後</span><span class="spec">上限 2倍・描く準備はタップの前</span></header>
+      <div class="stage"><canvas tabindex="0" aria-label="変更後のダーツ。タップすると投げます"></canvas><div class="paused" hidden>タップで動かす</div></div>
+      <div class="status" aria-live="polite"></div>
+      <dl><dt>描く解像度</dt><dd class="res">-</dd><dt>1秒あたりのコマ数</dt><dd class="fps">-</dd><dt>投げている間の一番長いコマ</dt><dd class="worst">-</dd></dl>
+    </section>
+  </div>
+  <p class="note">コマ数と「一番長いコマ」は、スマホで見ると差が分かりやすいです。PC は描く力に余裕があるので、どちらも速く出ることがあります。「この端末のまま」で端末が2倍以下の画面なら、変更前と変更後の解像度は同じになります（変わるのは3倍の画面だけです）。</p>
+
+  <section class="shots">
+    <h2>静止画の拡大（3倍の画面で撮ったもの）</h2>
+    <p class="note">ブルのまわりの細い金属のワイヤーで比べています。変更後は線の縁がわずかに柔らかくなります。</p>
+    <div class="pair">
+      <figure><img src="img/before-zoom.png" alt="変更前のブル付近の拡大" width="360" height="360"><figcaption><span class="tag before">変更前</span></figcaption></figure>
+      <figure><img src="img/after-zoom.png" alt="変更後のブル付近の拡大" width="360" height="360"><figcaption><span class="tag after">変更後</span></figcaption></figure>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+function makeDarts(gl, OPT) {
+  const GameSound = { thunk() {}, whoosh() {}, unlock() {}, chime() {} };   // このページでは音を鳴らさない
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // 的の寸法（公式の寸法。mm）と、20 区画の数字の並び（真上が 20、時計回り）
+  const RING = { bull: 6.35, outerBull: 15.9, trebleIn: 99, trebleOut: 107, doubleIn: 162, doubleOut: 170 };
+  const ORDER = [20, 1, 18, 4, 13, 6, 10, 15, 2, 17, 3, 19, 7, 16, 8, 11, 14, 9, 12, 5];
+  const segAngle = (i) => (-90 + i * 18) * Math.PI / 180;   // 区画 i の中心の角度（画面の向き。20 が真上）
+  // 同じ種なら毎回同じ乱数（壁の木目や麻の模様を、開くたびに同じにするため）
+  function rng(seed) { return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+
+  // 結果に合った位置（cm）。当たりはブルの中、参加賞はシングル（内側か外側）のどこか
+  function targetFor(result) {
+    const seg = Math.floor(Math.random() * 20);
+    const a = segAngle(seg) + (Math.random() - .5) * (Math.PI / 10) * .6;
+    const r = result === 'win' ? Math.random() * 12 : (Math.random() < .5 ? 24 + Math.random() * 68 : 112 + Math.random() * 44);   // mm
+    const zone = result === 'win' ? 'bull' : (r < RING.trebleIn ? 'single' : 'outer');   // 刺さった区画（光らせる範囲）
+    return { x: Math.cos(a) * r / 10, y: -Math.sin(a) * r / 10, seg, zone };
+  }
+
+  function init3D() {
+    if (!window.THREE) return null;
+    const T = window.THREE;
+    let renderer;
+    try { renderer = new T.WebGLRenderer({ canvas: gl, antialias: true }); } catch { return null; }
+    OPT.renderer = renderer;
+    // スマホの高精細な画面でもくっきり描く。ただし 2 倍まで（3 倍だと描く点が 2 倍以上に増えて重く、見た目はほぼ変わらない）
+    renderer.setPixelRatio(Math.min(OPT.dpr, OPT.maxRatio));
+    renderer.shadowMap.enabled = true; renderer.shadowMap.type = T.PCFSoftShadowMap;
+    renderer.outputEncoding = T.sRGBEncoding; renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.0;
+    const srgb = (hex) => new T.Color(hex).convertSRGBToLinear();   // 色の指定は見たままの色（sRGB）で書く
+    const scene = new T.Scene(); scene.background = new T.Color(0x0c0a09);
+    const camera = new T.PerspectiveCamera(36, 380 / 470, 0.3, 900);
+
+    // 金属の映り込み用の部屋（明るい板を何枚か置いた箱を、反射の元にする）
+    const pmrem = new T.PMREMGenerator(renderer);
+    const env = new T.Scene();
+    env.add(new T.Mesh(new T.BoxGeometry(100, 100, 100), new T.MeshBasicMaterial({ color: 0x1c1814, side: T.BackSide })));
+    for (const [x, y, z, w, h, c] of [[0, 45, 10, 46, 12, 0xffffff], [-45, 8, 20, 10, 34, 0xffe0b0], [42, -6, 30, 8, 22, 0x9db8ff], [0, -40, 30, 30, 6, 0x553322]]) {
+      const m = new T.Mesh(new T.PlaneGeometry(w, h), new T.MeshBasicMaterial({ color: c, side: T.DoubleSide })); m.position.set(x, y, z); m.lookAt(0, 0, 0); env.add(m);
+    }
+    scene.environment = pmrem.fromScene(env, 0.02).texture;
+
+    // 照明: 上からのスポットライト（矢の影を的に落とす）と、弱い環境光
+    scene.add(new T.HemisphereLight(0xffe9cf, 0x120e0b, 0.32));
+    const spot = new T.SpotLight(0xfff0d8, 2.3, 0, 0.36, 0.6, 1);
+    spot.position.set(-28, 72, 118); spot.target.position.set(0, 0, 0); scene.add(spot, spot.target);
+    spot.castShadow = true; spot.shadow.mapSize.set(1024, 1024); spot.shadow.camera.near = 60; spot.shadow.camera.far = 260; spot.shadow.bias = -0.0005;
+
+    const tex = (cv, color) => { const t = new T.CanvasTexture(cv); if (color) t.encoding = T.sRGBEncoding; t.anisotropy = renderer.capabilities.getMaxAnisotropy(); return t; };
+
+    // 壁（木の板）
+    const wood = document.createElement('canvas'); wood.width = wood.height = 1024;
+    { const g = wood.getContext('2d'), r = rng(3);
+      for (let i = 0; i < 8; i++) {
+        const x = i * 128; g.fillStyle = `hsl(24, 32%, ${7 + r() * 4}%)`; g.fillRect(x, 0, 128, 1024);
+        for (let k = 0; k < 70; k++) {
+          g.strokeStyle = r() < .5 ? `rgba(255,215,170,${.025 + r() * .05})` : `rgba(0,0,0,${.05 + r() * .08})`; g.lineWidth = 1 + r() * 2;
+          const xx = x + r() * 128; g.beginPath(); g.moveTo(xx, 0); g.bezierCurveTo(xx + r() * 12 - 6, 300, xx + r() * 12 - 6, 700, xx + r() * 6 - 3, 1024); g.stroke();
+        }
+        g.fillStyle = 'rgba(0,0,0,.65)'; g.fillRect(x, 0, 3, 1024);
+      } }
+    const wallTex = tex(wood, true); wallTex.wrapS = wallTex.wrapT = T.RepeatWrapping; wallTex.repeat.set(3, 2);
+    const wall = new T.Mesh(new T.PlaneGeometry(520, 420), new T.MeshStandardMaterial({ map: wallTex, roughness: .85, envMapIntensity: .2 }));
+    wall.position.z = -4.6; wall.receiveShadow = true; scene.add(wall);
+
+    // 的（本体・面・周りのウレタンの輪）
+    const boardGroup = new T.Group(); scene.add(boardGroup);
+    const foam = new T.MeshStandardMaterial({ color: srgb(0x050505), roughness: .95, envMapIntensity: .15 });
+    const sur = new T.Mesh(new T.RingGeometry(22.4, 33, 128), foam); sur.position.z = -2.6; sur.receiveShadow = true;
+    const surEdge = new T.Mesh(new T.CylinderGeometry(33, 33, 1.9, 128, 1, true), foam); surEdge.rotation.x = Math.PI / 2; surEdge.position.z = -3.55; surEdge.castShadow = true;
+    const body = new T.Mesh(new T.CylinderGeometry(22.6, 22.6, 4, 128), new T.MeshStandardMaterial({ color: srgb(0x0b0b0b), roughness: .65, envMapIntensity: .3 }));
+    body.rotation.x = Math.PI / 2; body.position.z = -2; body.castShadow = body.receiveShadow = true;
+    // 的の面を、画像ではなく立体の部品で組む（近づいても粗くならない）
+    // 麻の質感: 512px の模様を繰り返し敷き詰める（端がつながるように、はみ出した線は反対側にも描く）
+    const fiber = document.createElement('canvas'); fiber.width = fiber.height = 512;
+    { const g = fiber.getContext('2d'), r = rng(11); g.fillStyle = '#d9d9d9'; g.fillRect(0, 0, 512, 512);
+      for (let n = 0; n < 9000; n++) {
+        const x = r() * 512, y = r() * 512, ang = r() * Math.PI, len = 3 + r() * 9, v = r();
+        g.strokeStyle = v < .5 ? `rgba(255,255,255,${.25 + r() * .35})` : `rgba(60,60,60,${.18 + r() * .3})`; g.lineWidth = .8 + r() * .8;
+        for (const [ox, oy] of [[0, 0], [-512, 0], [512, 0], [0, -512], [0, 512]]) {
+          g.beginPath(); g.moveTo(x + ox, y + oy); g.lineTo(x + ox + Math.cos(ang) * len, y + oy + Math.sin(ang) * len); g.stroke();
+        }
+      } }
+    const fiberMap = tex(fiber, true), fiberBump = tex(fiber, false);
+    for (const t of [fiberMap, fiberBump]) { t.wrapS = t.wrapT = T.RepeatWrapping; t.repeat.set(5, 5); }
+    const sisal = (color) => new T.MeshStandardMaterial({ color: srgb(color), map: fiberMap, bumpMap: fiberBump, bumpScale: .025, roughness: .92, envMapIntensity: .25 });
+    const M = { dark: sisal(0x1d1b19), cream: sisal(0xf3e3c0), red: sisal(0xc8262d), green: sisal(0x138a4c), ring: sisal(0x121110) };
+    const cm = (v) => v / 10;                                  // mm → cm
+    const flat = (geo) => {                                    // UV を的全体で共通にする（質感の細かさをそろえる）
+      const p = geo.attributes.position, uv = geo.attributes.uv;
+      for (let i = 0; i < p.count; i++) uv.setXY(i, p.getX(i) / 45 + .5, p.getY(i) / 45 + .5);
+      return geo;
+    };
+    const faceGroup = new T.Group(); faceGroup.position.z = .01;
+    const put = (geo, mat) => { const m = new T.Mesh(flat(geo), mat); m.receiveShadow = true; faceGroup.add(m); };
+    put(new T.RingGeometry(cm(RING.doubleOut), 22.5, 256, 1), M.ring);
+    for (let i = 0; i < 20; i++) {
+      const start = -segAngle(i) - Math.PI / 20, len = Math.PI / 10, dark = i % 2 === 0;
+      const bands = [[RING.outerBull, RING.trebleIn, dark ? M.dark : M.cream], [RING.trebleIn, RING.trebleOut, dark ? M.red : M.green],
+                     [RING.trebleOut, RING.doubleIn, dark ? M.dark : M.cream], [RING.doubleIn, RING.doubleOut, dark ? M.red : M.green]];
+      for (const [r0, r1, mat] of bands) put(new T.RingGeometry(cm(r0), cm(r1), 24, 2, start, len), mat);
+    }
+    put(new T.RingGeometry(cm(RING.bull), cm(RING.outerBull), 64, 1), M.green);
+    put(new T.CircleGeometry(cm(RING.bull), 48), M.red);
+    // 金属のワイヤー（丸い針金。照明を反射する）
+    const wireM = new T.MeshStandardMaterial({ color: srgb(0xd4d8de), metalness: 1, roughness: .28 });
+    for (const r of [RING.bull, RING.outerBull, RING.trebleIn, RING.trebleOut, RING.doubleIn, RING.doubleOut, 222]) {
+      const w = new T.Mesh(new T.TorusGeometry(cm(r), .045, 8, 256), wireM); w.position.z = .035; faceGroup.add(w);
+    }
+    for (let i = 0; i < 20; i++) {
+      const a = -(segAngle(i) - Math.PI / 20), r0 = cm(RING.outerBull), r1 = cm(RING.doubleOut);
+      const w = new T.Mesh(new T.CylinderGeometry(.04, .04, r1 - r0, 8), wireM);
+      w.position.set(Math.cos(a) * (r0 + r1) / 2, Math.sin(a) * (r0 + r1) / 2, .035); w.rotation.z = a - Math.PI / 2; faceGroup.add(w);
+    }
+    // 数字（1文字ずつ高解像度で描く）
+    const numFont = '"Arial Narrow", "Helvetica Neue", Arial, sans-serif';   // 端末にある、幅の狭い字体
+    ORDER.forEach((num, i) => {
+      const cv = document.createElement('canvas'); cv.width = cv.height = 256;
+      const g = cv.getContext('2d'); g.fillStyle = '#f2f1ec'; g.font = `600 190px ${numFont}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(num), 128, 136);
+      const t = tex(cv, true);
+      const m = new T.Mesh(new T.PlaneGeometry(2.7, 2.7), new T.MeshStandardMaterial({ map: t, transparent: true, roughness: .5, metalness: .2, envMapIntensity: .4 }));
+      const a = -segAngle(i), r = cm(196); m.position.set(Math.cos(a) * r, Math.sin(a) * r, .03); faceGroup.add(m);
+    });
+    boardGroup.add(sur, surEdge, body, faceGroup);
+
+    // 矢（先端 → バレル → シャフト → フライト）。先端が原点で、後ろが +z。単位は cm で実物と同じくらい
+    const steel = new T.MeshStandardMaterial({ color: srgb(0xdfe3e8), metalness: 1, roughness: .2 });
+    const tung = new T.MeshStandardMaterial({ color: srgb(0x9ba2ab), metalness: 1, roughness: .3 });
+    const shaftM = new T.MeshStandardMaterial({ color: srgb(0x141414), metalness: .35, roughness: .25 });
+    const ringM = new T.MeshStandardMaterial({ color: srgb(0xd9531a), metalness: .7, roughness: .3 });
+    const lathe = (pts, mat) => { const geo = new T.LatheGeometry(pts.map(([r, z]) => new T.Vector2(r, z)), 40); geo.rotateX(Math.PI / 2); const m = new T.Mesh(geo, mat); m.castShadow = true; return m; };
+    const knurl = []; for (let z = 3.75; z < 7.7; z += .16) knurl.push([.355, z], [.322, z + .05], [.322, z + .09], [.355, z + .14]);
+    const fl = document.createElement('canvas'); fl.width = 256; fl.height = 512;
+    { const g = fl.getContext('2d'); const gr = g.createLinearGradient(0, 0, 256, 512); gr.addColorStop(0, '#ff8a3d'); gr.addColorStop(1, '#a3260b'); g.fillStyle = gr; g.fillRect(0, 0, 256, 512);
+      g.strokeStyle = 'rgba(255,255,255,.85)'; g.lineWidth = 16; for (const y of [150, 230]) { g.beginPath(); g.moveTo(0, y + 80); g.lineTo(256, y); g.stroke(); }
+      g.fillStyle = 'rgba(255,255,255,.9)'; g.font = '700 120px sans-serif'; g.textAlign = 'center'; g.fillText('祭', 150, 430); }
+    const flightTex = tex(fl, true); flightTex.repeat.set(1 / 1.95, 1 / 3.6);
+    const flightM = new T.MeshStandardMaterial({ map: flightTex, side: T.DoubleSide, roughness: .45, metalness: .05 });
+    function buildDart() {
+      const g = new T.Group();
+      g.add(lathe([[0, 0], [.05, .25], [.1, 2.8], [.12, 3.2]], steel));
+      g.add(lathe([[.12, 3.2], [.28, 3.3], [.35, 3.6], ...knurl, [.33, 7.95], [.2, 8.25]], tung));
+      g.add(lathe([[.21, 8.25], [.23, 8.35], [.23, 8.7], [.19, 8.8]], ringM));
+      g.add(lathe([[.19, 8.8], [.17, 9], [.16, 13.2], [.12, 13.4], [0, 13.45]], shaftM));
+      const shape = new T.Shape(); [[0, 0], [.4, 0], [1.95, 1.3], [1.95, 3.3], [1.7, 3.6], [0, 3.6]].forEach(([x, y], i) => (i ? shape.lineTo(x, y) : shape.moveTo(x, y)));
+      const fgeo = new T.ShapeGeometry(shape); fgeo.rotateX(Math.PI / 2); fgeo.translate(0, 0, 10.2);
+      for (let i = 0; i < 4; i++) { const m = new T.Mesh(fgeo, flightM); m.rotation.z = i * Math.PI / 2 + Math.PI / 4; m.castShadow = true; g.add(m); }
+      g.scale.setScalar(1.25);
+      return g;
+    }
+    const dartObj = new T.Group(); dartObj.add(buildDart()); scene.add(dartObj);
+
+    // 刺さったときに舞う麻の粉
+    const N = 70, pPos = new Float32Array(N * 3), pVel = [];
+    const pGeo = new T.BufferGeometry(); pGeo.setAttribute('position', new T.BufferAttribute(pPos, 3));
+    const pMat = new T.PointsMaterial({ color: 0xeedcb4, size: .45, transparent: true, opacity: 0, depthWrite: false });
+    const dust = new T.Points(pGeo, pMat); scene.add(dust);
+
+    // 刺さった区画を光らせる板
+    const glowMat = new T.MeshBasicMaterial({ color: 0xffc35a, transparent: true, opacity: 0, blending: T.AdditiveBlending, depthWrite: false, side: T.DoubleSide });
+    let glow = null;
+
+    const Zax = new T.Vector3(0, 0, 1);
+    function orient(tail, roll, wobX = 0, wobY = 0) {
+      const q = new T.Quaternion().setFromUnitVectors(Zax, tail.clone().normalize());
+      q.multiply(new T.Quaternion().setFromEuler(new T.Euler(wobX, wobY, 0))).multiply(new T.Quaternion().setFromAxisAngle(Zax, roll));
+      dartObj.quaternion.copy(q);
+    }
+    const V = (x, y, z) => new T.Vector3(x, y, z);
+    const ease = (u) => (u < 0 ? 0 : u > 1 ? 1 : u * u * (3 - 2 * u));
+    const HAND3 = V(4, -6, 70), CAM0 = V(0, 1, 118), LOOK0 = V(0, -2, 0), CAMF = V(12, 4, 96);
+    const G = V(0, -980, 0), TF = .42;                        // 重力（cm/s²）と、実際の飛ぶ時間（秒）
+    const S = { phase: 'idle', t: 0, tau: 0, p0: null, v0: null, target: null, tail: null, zone: null, done: null, roll: 0, look: LOOK0.clone(), orbitFrom: null };
+
+    function toBoard(hit) { return V(hit.x, hit.y, 0); }       // 狙う位置（cm）
+    function zoneGeo(hit) {
+      const a = segAngle(hit.seg), mm = (v) => v / 10;
+      if (hit.zone === 'bull') return new T.CircleGeometry(mm(RING.outerBull) + .1, 48);
+      const [r0, r1] = { treble: [RING.trebleIn, RING.trebleOut], double: [RING.doubleIn, RING.doubleOut], outer: [RING.trebleOut, RING.doubleIn], single: [RING.outerBull, RING.trebleIn] }[hit.zone];
+      return new T.RingGeometry(mm(r0), mm(r1), 48, 1, -a - Math.PI / 20, Math.PI / 10);
+    }
+    // 描く解像度を、表示されている大きさに合わせる（合っていないと引き伸ばされてぼやける）
+    let sized = '';
+    function resize3() {
+      const w = gl.clientWidth, h = gl.clientHeight; if (!w || !h || sized === `${w}x${h}`) return;
+      sized = `${w}x${h}`; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix();
+    }
+    function reset() {
+      S.phase = 'idle'; S.t = 0; if (glow) { boardGroup.remove(glow); glow.geometry.dispose(); glow = null; }
+      pMat.opacity = 0; camera.position.copy(CAM0); S.look.copy(LOOK0); boardGroup.position.z = 0;
+    }
+    function land() {
+      S.phase = 'impact'; S.t = 0;
+      const dir = S.v.clone().normalize();
+      S.tail = dir.clone().negate();
+      S.tip = S.target.clone().add(dir.multiplyScalar(1.3));   // 1cm ほど刺さる
+      GameSound.thunk();
+      for (let i = 0; i < N; i++) { pPos.set([S.target.x, S.target.y, S.target.z + .2], i * 3); pVel[i] = V((Math.random() - .5) * 46, Math.random() * 34 - 6, 8 + Math.random() * 34); }
+      pGeo.attributes.position.needsUpdate = true; pMat.opacity = 1;
+      glow = new T.Mesh(zoneGeo(S.hit), glowMat); glow.position.z = .06; boardGroup.add(glow);
+      S.orbitFrom = camera.position.clone().sub(S.target);
+    }
+    function finish() {
+      S.phase = 'done'; S.t = 0;
+      if (!S.tip) { const dir = V(.02, -.18, -1).normalize(); S.tail = dir.clone().negate(); S.tip = S.target.clone().add(dir.multiplyScalar(1.3)); }
+      if (!glow) { glow = new T.Mesh(zoneGeo(S.hit), glowMat); glow.position.z = .06; boardGroup.add(glow); }
+      const cb = S.done; S.done = null; cb && cb();
+    }
+    function throwTo(hit, done) {
+      S.hit = hit; S.target = toBoard(hit); S.done = done; S.tip = null;
+      if (reduced) { camera.position.copy(CAMF); S.look.copy(LOOK0); finish(); return; }
+      S.phase = 'windup'; S.t = 0; S.startedAt = performance.now();
+    }
+    function skip() {                                          // 演出中にタップしたら、最後まで飛ばす
+      if (S.phase === 'idle' || S.phase === 'done') return false;
+      pMat.opacity = 0; camera.position.copy(CAMF); S.look.copy(LOOK0); boardGroup.position.z = 0; finish(); return true;
+    }
+
+    function update(dt, now) {
+      const s = now / 1000;
+      S.t += dt;
+      if (S.phase === 'idle') {
+        const p = HAND3.clone().add(V(Math.sin(s * 1.3) * .35, Math.cos(s * 1.7) * .25, 0));
+        dartObj.position.copy(p); orient(V(.25, -.1, 1), .6);
+        camera.position.lerp(CAM0, .08); S.look.lerp(LOOK0, .08);
+      } else if (S.phase === 'windup') {
+        const u = ease(S.t / .24), p = HAND3.clone().add(V(.6, 1.6, 6).multiplyScalar(u));
+        dartObj.position.copy(p); orient(V(.25 - u * .22, -.1 + u * .12, 1), .6);
+        if (S.t >= .24) {
+          S.phase = 'flight'; S.tau = 0; S.p0 = p.clone(); S.roll = .6;
+          S.v0 = S.target.clone().sub(S.p0).sub(G.clone().multiplyScalar(.5 * TF * TF)).divideScalar(TF);
+          GameSound.whoosh(.9);
+        }
+      } else if (S.phase === 'flight') {
+        const pz = S.p0.z + S.v0.z * S.tau;
+        const speed = .12 + (.55 - .12) * ease((pz - 10) / 26);      // 的の直前でスローモーション
+        S.tau = Math.min(TF, S.tau + dt * speed);
+        const tau = S.tau;
+        const p = S.p0.clone().add(S.v0.clone().multiplyScalar(tau)).add(G.clone().multiplyScalar(.5 * tau * tau));
+        S.v = S.v0.clone().add(G.clone().multiplyScalar(tau));
+        S.roll += dt * speed * Math.PI * 2 * 5;                       // 回りながら飛ぶ
+        const wob = .06 * Math.sin(tau * 70) * Math.exp(-tau * 5);
+        dartObj.position.copy(p); orient(S.v.clone().negate(), S.roll, wob, wob * .6);
+        const e = ease(tau / TF / .35);
+        const chase = p.clone().add(V(-4.5, 3.2, 24));
+        camera.position.copy(CAM0.clone().lerp(chase, e));
+        S.look.copy(LOOK0.clone().lerp(p.clone().lerp(S.target, .55), e));
+        if (tau >= TF) land();
+      } else if (S.phase === 'impact') {
+        const t = S.t;
+        const wob = .14 * Math.exp(-5 * t) * Math.sin(48 * t);
+        const shake = .3 * Math.exp(-14 * t) * Math.sin(60 * t);
+        boardGroup.position.z = shake;
+        dartObj.position.copy(S.tip).add(V(0, 0, shake)); orient(S.tail, S.roll, wob, wob * .4);
+        const u = ease(t / 1.35);
+        const phi = Math.atan2(S.orbitFrom.x, S.orbitFrom.z) + (0.95 - Math.atan2(S.orbitFrom.x, S.orbitFrom.z)) * u;
+        const R = S.orbitFrom.length() + (19 - S.orbitFrom.length()) * u;
+        camera.position.copy(S.target).add(V(Math.sin(phi) * R, S.orbitFrom.y + (2 - S.orbitFrom.y) * u, Math.cos(phi) * R));
+        S.look.copy(S.target.clone().add(S.tail.clone().multiplyScalar(6 * u)));
+        if (t >= 1.35) { S.phase = 'pullback'; S.t = 0; S.pullFrom = camera.position.clone(); S.lookFrom = S.look.clone(); }
+      } else if (S.phase === 'pullback') {
+        const u = ease(S.t / .75);
+        camera.position.copy(S.pullFrom.clone().lerp(CAMF, u)); S.look.copy(S.lookFrom.clone().lerp(LOOK0, u));
+        dartObj.position.copy(S.tip); orient(S.tail, S.roll);
+        if (S.t >= .75) finish();
+      } else if (S.phase === 'done') {
+        dartObj.position.copy(S.tip); orient(S.tail, S.roll || .6);
+        camera.position.lerp(CAMF.clone().add(V(Math.sin(s * .4) * 2, 0, 0)), .03); S.look.lerp(LOOK0, .05);
+      }
+      if (pMat.opacity > 0) {
+        for (let i = 0; i < N; i++) { pVel[i].y -= 300 * dt; pPos[i * 3] += pVel[i].x * dt * .4; pPos[i * 3 + 1] += pVel[i].y * dt * .4; pPos[i * 3 + 2] += pVel[i].z * dt * .4; }
+        pGeo.attributes.position.needsUpdate = true; pMat.opacity = Math.max(0, pMat.opacity - dt * .9);
+      }
+      glowMat.opacity = glow ? .35 + .25 * Math.sin(s * 5) : 0;
+      camera.lookAt(S.look);
+    }
+    let last = performance.now();
+    function loop(now) {
+      if (!OPT.alive()) { renderer.dispose(); renderer.forceContextLoss(); return; }
+      if (!OPT.active()) { last = now; requestAnimationFrame(loop); return; }   // 止めている方は描かない（比べる方だけに力を使う）
+      const raw = now - last;
+      const dt = Math.min(.1, raw / 1000); last = now;   // コマ数が少ない端末でも、実際の時間どおりに進む
+      if (S.startedAt && S.phase !== 'idle' && S.phase !== 'done' && now - S.startedAt > 7000) skip();   // 7秒を超えたら最後まで飛ばす
+      resize3(); update(dt, now); renderer.render(scene, camera); OPT.onFrame(raw, S.phase);   // 大きさが変わったら毎回合わせ直す
+      requestAnimationFrame(loop);
+    }
+    // タップする前に、刺さったときに初めて使う部品（光る区画）も含めて、描く準備（シェーダーの組み立て）を済ませておく。
+    // 済ませないと、刺さった瞬間にその場で組み立てが走り、一番の見せ場でカクッと止まる
+    if (OPT.warm) {
+      const warm = new T.Mesh(new T.CircleGeometry(.1, 8), glowMat); boardGroup.add(warm);
+      renderer.compile(scene, camera);
+      boardGroup.remove(warm); warm.geometry.dispose();
+    }
+    reset(); resize3(); requestAnimationFrame(loop);
+    return { throwTo, skip, reset, resize: resize3, busy: () => S.phase !== 'idle' && S.phase !== 'done' };
+  }
+
+  return { api: init3D(), targetFor };
+}
+
+(() => {
+  const CONFIG = { before: { maxRatio: 3, warm: false }, after: { maxRatio: 2, warm: true } };
+  let dpr = 3, active = 'after';
+  const inst = {};
+
+  function build(key) {
+    const panel = document.getElementById('p-' + key);
+    if (inst[key]) inst[key].dead = true;                    // 前のものは次のコマで片付ける
+    const old = panel.querySelector('canvas'), cv = old.cloneNode(true);
+    old.replaceWith(cv);
+    const st = { dead: false, drawn: 0, frames: [], worst: 0, phase: 'idle' };
+    const OPT = Object.assign({}, CONFIG[key], {
+      dpr,
+      alive: () => !st.dead,
+      active: () => active === key || st.drawn < 3,          // 止めている方も、最初の数コマは描いて絵を出す
+      onFrame(raw, phase) {
+        st.drawn++;
+        const now = performance.now();
+        st.frames.push(now); while (st.frames.length && now - st.frames[0] > 1000) st.frames.shift();
+        if (phase !== 'idle' && phase !== 'done' && st.phase !== 'idle') st.worst = Math.max(st.worst, raw);
+        st.phase = phase;
+      },
+    });
+    const made = window.THREE ? makeDarts(cv, OPT) : null;
+    if (!made || !made.api) {
+      panel.querySelector('.status').innerHTML = '<span class="err">この端末では立体の描画（WebGL）が使えません</span>';
+      return;
+    }
+    st.api = made.api; st.targetFor = made.targetFor; st.opt = OPT; st.panel = panel;
+    inst[key] = st;
+    cv.addEventListener('click', () => go(key));
+    cv.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(key); } });
+    panel.querySelector('.res').textContent = '計算中…';
+    panel.querySelector('.status').textContent = '';
+  }
+
+  function go(key) {
+    const st = inst[key]; if (!st) return;
+    if (active !== key) { active = key; render(); }
+    if (st.api.skip()) return;                               // 投げている途中なら最後まで飛ばす
+    const result = Math.random() < .3 ? 'win' : 'participation';
+    st.api.reset(); st.worst = 0; st.phase = 'idle';
+    st.panel.querySelector('.status').textContent = '投げています…';
+    st.api.throwTo(st.targetFor(result), () => {
+      st.panel.querySelector('.status').textContent = result === 'win' ? '当たり！（ブル）' : '参加賞！（シングル）';
+    });
+  }
+
+  function render() {
+    for (const key of ['before', 'after']) {
+      const st = inst[key]; if (!st) continue;
+      st.panel.querySelector('.paused').hidden = active === key;
+    }
+  }
+
+  function tick() {
+    for (const key of ['before', 'after']) {
+      const st = inst[key]; if (!st || st.dead) continue;
+      const cv = st.panel.querySelector('canvas');
+      st.panel.querySelector('.res').textContent = `${cv.width}×${cv.height}（${Math.min(dpr, st.opt.maxRatio)}倍）`;
+      st.panel.querySelector('.fps').textContent = active === key ? `${st.frames.length} コマ` : '止めています';
+      st.panel.querySelector('.worst').textContent = st.worst ? `${Math.round(st.worst)} ms` : '投げると出ます';
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function setDpr(v, btn) {
+    dpr = v;
+    for (const b of document.querySelectorAll('.seg button')) b.setAttribute('aria-pressed', String(b === btn));
+    build('before'); build('after'); render();
+  }
+  const native = Math.max(1, Math.round((window.devicePixelRatio || 1) * 10) / 10);
+  const nb = document.getElementById('dprNative');
+  nb.textContent = `この端末のまま（${native}倍）`;
+  document.getElementById('dpr3').addEventListener('click', (e) => setDpr(3, e.currentTarget));
+  nb.addEventListener('click', (e) => setDpr(native, e.currentTarget));
+
+  build('before'); build('after'); render(); requestAnimationFrame(tick);
+})();
+</script>
+
+</body>
+</html>
